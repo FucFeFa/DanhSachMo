@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <title>Danh sách bệnh nhân chờ mổ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            /* padding: 20px; */
+            margin: 0;
+            overflow: hidden;
+        }
+
+        h2 {
+            text-align: center;
+            color: #2B6EFF;
+            margin: 1.5em 0 0 0;
+            padding-bottom: 20px;
+            font-size: 30px;
+        }
+
+        table {
+            margin-top: 1em;
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #3c568e;
+            padding: 16px 4px;
+            text-align: center;
+        }
+
+        td {
+            color: #0037ae;
+            font-weight: bold;
+        }
+
+        th {
+            background-color: #2B6EFF;
+            padding: 10px 0;
+        }
+
+        #title {
+            text-align: center;
+            color: #fff;
+        }
+
+        #updateList {
+            text-align: center;
+            font-weight: 500;
+        }
+
+        #updateList > p {
+            color: #2B6EFF;
+            margin: 0;
+            padding-bottom: 10px;
+        }
+
+        #countdown {
+            color: #FE0000;
+        }
+
+        .ads {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 90vw;
+            max-height: 90vh;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <h2>Danh sách bệnh nhân chờ mổ</h2>
+
+    <div id="data">Đang tải dữ liệu...</div>
+
+    <div id="ads" style="display:none; text-align:center;">
+        <img class="ads" src="" alt="Quảng cáo" style="max-width:100%; height:auto;" />
+    </div>
+
+    <script>
+        const sheetId = '1Axve1izrC6K_FMzmYI1o9KKHVp4jLA9tLBWxcrAdUx4';
+        const sheetName = 'DS_CHO_MO';
+        const range = 'A3:G50';
+        const apiKey = 'AIzaSyBBKTwrTqR-NU5XiMDL9XRVVOLjiF62L1I';
+
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${sheetName}!${range}?key=${apiKey}`;
+
+        var countdown = 9;
+        var globalData = [];
+        var currentIndex = 1;
+        var pageSize = 10; // Số lượng dòng hiển thị trên 1 trang
+        var displayTime = 0;
+        var maxDisplayTime = 10; // Sau 300 giây sẽ hiển thị quảng cáo
+        var adsDuration = 30; // Thời lượng quảng cáo ( tính bằng giây )
+        var inAdsMode = false;
+        const imgLength = 10; // Số lượng hình ảnh trong file assests/img
+
+        // Lấy tất cả tên file từ file assests/img
+        function getImageUrls() {
+            const imageUrls = [];
+            for (let i = 1; i <= 10; i++) {
+                imageUrls.push(`./assets/img/${i}.jpg`);
+            }
+            return imageUrls;
+        }
+
+        // Hàm kiểm tra xem ảnh có tồn tại không
+        function checkImageUrl(imgUrl, callback) {
+            const image = new Image();
+            image.onload = () => callback(true);
+            image.onerror = () => callback(false);
+            image.src = imgUrl;
+        }
+
+        // Hàm lấy dữ liệu từ google sheet
+        async function getData() {
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data.values) {
+                    document.getElementById('data').textContent = 'Không có dữ liệu.';
+                    return;
+                }
+
+                globalData = data.values;
+            } catch (error) {
+                console.error('Lỗi khi tải dữ liệu:', error);
+                document.getElementById('data').textContent = 'Lỗi khi tải dữ liệu.';
+            }
+        }
+
+        // Hàm hiển thị danh sách mổ
+        function loadData() {
+            if(globalData.length == 0) return
+
+            const rows = globalData;
+            let html = '<table>';
+                
+            // Header
+            html += '<thead><tr>' + rows[0].map(cell => `<th id="title">${cell}</th>`).join('') + '</tr></thead>';
+                
+            // Body
+            html += '<tbody>';
+
+            // Hiển thị 10 dòng tiếp theo
+            const end = Math.min(currentIndex + pageSize, rows.length);
+            for (let i = currentIndex; i < end; i++) {
+                const row = rows[i];
+                html += `<tr>` + row.map(cell => `<td>${cell || ''}</td>`).join('') + '</tr>';
+            }
+
+            html += '</tbody></table>';
+            document.getElementById('data').innerHTML = html;
+
+            // Cập nhật chỉ số hiển thị tiếp theo
+            currentIndex = end;
+        }
+
+        // Hàm kiểm tra xem ảnh có tồn tại không
+        function checkImageUrlAsync(url) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = url;
+            });
+        }
+
+        // Hàm hiển thị quảng cáo
+        async function showAds() {
+            document.querySelector('h2').style.display = "none";
+            document.getElementById("data").style.display = "none";
+            document.getElementById("ads").style.display = "block";
+
+            const imageUrls = getImageUrls();
+            const validImages = [];
+
+            for (let url of imageUrls) {
+                if (await checkImageUrlAsync(url)) {
+                    validImages.push(url);
+                }
+            }
+
+            if (validImages.length === 0) {
+                console.log("Không có ảnh quảng cáo hợp lệ.");
+                return;
+            }
+
+            // Hiển thị ảnh đầu tiên
+            let index = 0;
+            document.querySelector('.ads').src = validImages[index];
+
+            // Mỗi 10 giây đổi sang ảnh tiếp theo
+            const adsTimer = setInterval(() => {
+                index = (index + 1) % validImages.length;
+                document.querySelector('.ads').src = validImages[index];
+            }, 10000);
+
+            // Dừng hiển thị sau adsDuration giây
+            setTimeout(() => {
+                clearInterval(adsTimer);
+            }, adsDuration * 1000);
+        }
+
+        // Hàm hiển thị dữ liệu
+        function showData() {
+            document.querySelector('h2').style.display = "block";
+            document.getElementById("ads").style.display = "none";
+            document.getElementById("data").style.display = "block";
+        }
+
+
+        // Gọi hàm lần đầu chạy
+        (async () => {
+            await getData();
+            loadData();
+        })();
+
+        // Cập nhật dữ liệu sau 10 giây, sau mỗi 300 giây sẽ hiển thị quảng cáo
+        setInterval(async () => {
+            displayTime++;
+
+            if (inAdsMode) {
+                if (displayTime >= adsDuration) {
+                   inAdsMode = false;
+                    displayTime = 0;
+                    showData();
+
+                    // Nếu dữ liệu đã hết thì tải mới trước khi hiển thị
+                    if (currentIndex >= globalData.length) {
+                        currentIndex = 1;
+                        await getData();
+                    }
+                    loadData();
+                }
+                return;
+            }
+
+            // Nếu hết 5 phút thì chuyển sang quảng cáo
+            if (displayTime >= maxDisplayTime) {
+                inAdsMode = true;
+                displayTime = 0;
+                showAds();
+                return;
+            }
+
+            // Mỗi 10 giây load thêm 10 dòng
+            if (displayTime % 10 === 0) {
+                if (currentIndex >= globalData.length) {
+                    currentIndex = 1;
+                    await getData();
+                }
+                loadData();
+            }
+        }, 1000);
+
+
+    </script>
+</body>
+</html>
