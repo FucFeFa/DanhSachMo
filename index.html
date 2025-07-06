@@ -6,7 +6,6 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            /* padding: 20px; */
             margin: 0;
             overflow: hidden;
         }
@@ -16,14 +15,16 @@
             color: #2B6EFF;
             margin: 1.5em 0 0 0;
             padding-bottom: 20px;
-            font-size: 30px;
+            font-size: 50px;
         }
 
         table {
             margin-top: 1em;
             border-collapse: collapse;
             width: 100%;
+            font-size: 24px;
         }
+
         th, td {
             border: 1px solid #3c568e;
             padding: 16px 4px;
@@ -65,19 +66,39 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            max-width: 90vw;
-            max-height: 90vh;
+            max-width: 100vw;
+            max-height: 100vh;
             object-fit: contain;
+            z-index: 9999;
         }
+
+        #overlayBlur {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(232, 232, 232, 0.1);
+            z-index: 999;
+            display: none;
+        }
+
     </style>
 </head>
 <body>
+    <div id="overlayBlur"></div>
+
+    <div id="clickToStart" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;z-index:99999;">
+        Bấm vào màn hình để bắt đầu
+    </div>
     <h2>Danh sách bệnh nhân chờ mổ</h2>
 
     <div id="data">Đang tải dữ liệu...</div>
 
+    <!-- Thêm cả ảnh và video vào vùng quảng cáo -->
     <div id="ads" style="display:none; text-align:center;">
-        <img class="ads" src="" alt="Quảng cáo" style="max-width:100%; height:auto;" />
+        <img id="adImage" class="ads" style="display:none;" />
+        <video id="adVideo" class="ads" muted autoplay playsinline style="display:none;"></video>
     </div>
 
     <script>
@@ -93,26 +114,40 @@
         var currentIndex = 1;
         var pageSize = 10; // Số lượng dòng hiển thị trên 1 trang
         var displayTime = 0;
-        var maxDisplayTime = 10; // Sau 300 giây sẽ hiển thị quảng cáo
-        var adsDuration = 30; // Thời lượng quảng cáo ( tính bằng giây )
+        var maxDisplayTime = 10; // Sau 10 giây hiển thị danh sách mổ sẽ hiển thị quảng cáo
+        var adsDisplayTime = 10; // Số giây hiển thị giữa mỗi quảng cáo
+        var adsDuration = 300; // Thời lượng quảng cáo ( tính bằng giây )
         var inAdsMode = false;
-        const imgLength = 10; // Số lượng hình ảnh trong file assests/img
+        const imgLength = 10; // Số lượng hình ảnh/video trong file assests/img
 
-        // Lấy tất cả tên file từ file assests/img
-        function getImageUrls() {
-            const imageUrls = [];
-            for (let i = 1; i <= 10; i++) {
-                imageUrls.push(`./assets/img/${i}.jpg`);
+        // 
+        document.getElementById("clickToStart").addEventListener("click", () => {
+            document.getElementById("adVideo").muted = false;
+            document.getElementById("clickToStart").style.display = "none";
+        });
+
+        // Lấy tất cả tên file từ file assests/img (bao gồm cả ảnh và video)
+        function getAdFiles() {
+            const adFiles = [];
+            const fileBasePath = "./assets/img/";
+            const fileCount = imgLength;
+
+            const extensions = ['jpg', 'jpeg', 'png', 'mp4', 'mkv', 'webm', 'mp3'];
+
+            for (let i = 1; i <= fileCount; i++) {
+                for (let ext of extensions) {
+                    adFiles.push(`${fileBasePath}${i}.${ext}`);
+                }
             }
-            return imageUrls;
+
+            return adFiles;
         }
 
-        // Hàm kiểm tra xem ảnh có tồn tại không
-        function checkImageUrl(imgUrl, callback) {
-            const image = new Image();
-            image.onload = () => callback(true);
-            image.onerror = () => callback(false);
-            image.src = imgUrl;
+        // Hàm kiểm tra file có tồn tại không
+        function checkFileExists(url) {
+            return fetch(url, { method: 'HEAD' })
+                .then(res => res.ok)
+                .catch(() => false);
         }
 
         // Hàm lấy dữ liệu từ google sheet
@@ -135,14 +170,14 @@
 
         // Hàm hiển thị danh sách mổ
         function loadData() {
-            if(globalData.length == 0) return
+            if(globalData.length == 0) return;
 
             const rows = globalData;
             let html = '<table>';
-                
+
             // Header
             html += '<thead><tr>' + rows[0].map(cell => `<th id="title">${cell}</th>`).join('') + '</tr></thead>';
-                
+
             // Body
             html += '<tbody>';
 
@@ -160,52 +195,6 @@
             currentIndex = end;
         }
 
-        // Hàm kiểm tra xem ảnh có tồn tại không
-        function checkImageUrlAsync(url) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => resolve(true);
-                img.onerror = () => resolve(false);
-                img.src = url;
-            });
-        }
-
-        // Hàm hiển thị quảng cáo
-        async function showAds() {
-            document.querySelector('h2').style.display = "none";
-            document.getElementById("data").style.display = "none";
-            document.getElementById("ads").style.display = "block";
-
-            const imageUrls = getImageUrls();
-            const validImages = [];
-
-            for (let url of imageUrls) {
-                if (await checkImageUrlAsync(url)) {
-                    validImages.push(url);
-                }
-            }
-
-            if (validImages.length === 0) {
-                console.log("Không có ảnh quảng cáo hợp lệ.");
-                return;
-            }
-
-            // Hiển thị ảnh đầu tiên
-            let index = 0;
-            document.querySelector('.ads').src = validImages[index];
-
-            // Mỗi 10 giây đổi sang ảnh tiếp theo
-            const adsTimer = setInterval(() => {
-                index = (index + 1) % validImages.length;
-                document.querySelector('.ads').src = validImages[index];
-            }, 10000);
-
-            // Dừng hiển thị sau adsDuration giây
-            setTimeout(() => {
-                clearInterval(adsTimer);
-            }, adsDuration * 1000);
-        }
-
         // Hàm hiển thị dữ liệu
         function showData() {
             document.querySelector('h2').style.display = "block";
@@ -213,6 +202,79 @@
             document.getElementById("data").style.display = "block";
         }
 
+        // Hàm hiển thị quảng cáo (có cả ảnh và video, đảm bảo video chiếu hết hoặc dừng đúng giờ)
+        async function showAds() {
+            document.querySelector('h2').style.display = "none";
+            document.getElementById("data").style.display = "none";
+            document.getElementById("ads").style.display = "block";
+            document.getElementById("overlayBlur").style.display = "block";
+
+
+            const adImage = document.getElementById("adImage");
+            const adVideo = document.getElementById("adVideo");
+
+            const files = getAdFiles();
+            const validFiles = [];
+
+            for (let file of files) {
+                if (await checkFileExists(file)) {
+                    validFiles.push(file);
+                }
+            }
+
+            if (validFiles.length === 0) {
+                console.log("Không có quảng cáo nào hợp lệ.");
+                return;
+            }
+
+            let index = 0;
+            let stopAds = false;
+
+            // Sau adsDuration giây thì dừng quảng cáo và quay lại dữ liệu
+            setTimeout(() => {
+                stopAds = true;
+                adImage.style.display = "none";
+                adVideo.pause();
+                adVideo.style.display = "none";
+                document.getElementById("overlayBlur").style.display = "none";
+                showData();
+                inAdsMode = false;
+                displayTime = 0;
+            }, adsDuration * 1000);
+
+            async function showNextAd() {
+                if (stopAds) return;
+
+                const file = validFiles[index];
+                const isVideo = file.endsWith(".mp4");
+
+                if (isVideo) {
+                    adImage.style.display = "none";
+                    adVideo.style.display = "block";
+                    adVideo.src = file;
+                    adVideo.play();
+
+                    adVideo.onended = () => {
+                        if (stopAds) return;
+                        index = (index + 1) % validFiles.length;
+                        showNextAd();
+                    };
+                } else {
+                    adVideo.pause();
+                    adVideo.style.display = "none";
+                    adImage.style.display = "block";
+                    adImage.src = file;
+
+                    setTimeout(() => {
+                        if (stopAds) return;
+                        index = (index + 1) % validFiles.length;
+                        showNextAd();
+                    }, adsDisplayTime * 1000);
+                }
+            }
+
+            showNextAd();
+        }
 
         // Gọi hàm lần đầu chạy
         (async () => {
@@ -220,27 +282,12 @@
             loadData();
         })();
 
-        // Cập nhật dữ liệu sau 10 giây, sau mỗi 300 giây sẽ hiển thị quảng cáo
+        // Cập nhật dữ liệu sau mỗi giây, sau một thời gian thì hiển thị quảng cáo
         setInterval(async () => {
             displayTime++;
 
-            if (inAdsMode) {
-                if (displayTime >= adsDuration) {
-                   inAdsMode = false;
-                    displayTime = 0;
-                    showData();
+            if (inAdsMode) return;
 
-                    // Nếu dữ liệu đã hết thì tải mới trước khi hiển thị
-                    if (currentIndex >= globalData.length) {
-                        currentIndex = 1;
-                        await getData();
-                    }
-                    loadData();
-                }
-                return;
-            }
-
-            // Nếu hết 5 phút thì chuyển sang quảng cáo
             if (displayTime >= maxDisplayTime) {
                 inAdsMode = true;
                 displayTime = 0;
@@ -248,7 +295,6 @@
                 return;
             }
 
-            // Mỗi 10 giây load thêm 10 dòng
             if (displayTime % 10 === 0) {
                 if (currentIndex >= globalData.length) {
                     currentIndex = 1;
@@ -257,8 +303,6 @@
                 loadData();
             }
         }, 1000);
-
-
     </script>
 </body>
 </html>
