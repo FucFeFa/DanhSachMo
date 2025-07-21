@@ -15,14 +15,14 @@
             color: #2B6EFF;
             margin: 1.5em 0 0 0;
             padding-bottom: 20px;
-            font-size: 50px;
+            font-size: 52px; /* Kích cỡ chữ tiêu đề */
         }
 
         table {
             margin-top: 1em;
             border-collapse: collapse;
             width: 100%;
-            font-size: 24px;
+            font-size: 26px; /* Kích cỡ chữ bảng danh sách */
         }
 
         th, td {
@@ -89,7 +89,7 @@
     <div id="overlayBlur"></div>
 
     <div id="clickToStart" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;z-index:99999;">
-        Bấm vào màn hình để bắt đầu
+        Bấm vào màn hình để bật tiếng cho video
     </div>
     <h2>Danh sách bệnh nhân chờ mổ</h2>
 
@@ -102,34 +102,35 @@
     </div>
 
     <script>
-        const sheetId = '1Axve1izrC6K_FMzmYI1o9KKHVp4jLA9tLBWxcrAdUx4';
-        const sheetName = 'DS_CHO_MO';
-        const range = 'A3:G50';
-        const apiKey = 'AIzaSyBBKTwrTqR-NU5XiMDL9XRVVOLjiF62L1I';
+        // Kết nối tới google sheet
+        const sheetId = '1Axve1izrC6K_FMzmYI1o9KKHVp4jLA9tLBWxcrAdUx4'; // Lấy từ link chia sẻ sheet ( nằm giữa d/ và /edit)
+        const sheetName = 'DS_CHO_MO'; // Tên sheet
+        const range = 'A3:G50'; // Vùng lấy dữ liệu
+        const apiKey = 'AIzaSyBBKTwrTqR-NU5XiMDL9XRVVOLjiF62L1I'; // Truy cập https://console.cloud.google.com/?hl=vi -> Trong Quick access chọn APIs & Services -> Chọn Credentials -> Tìm API key và bấm vào Show key
 
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${sheetName}!${range}?key=${apiKey}`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${sheetName}!${range}?key=${apiKey}`; // Giữ nguyên không đổi
 
+        // Khai báo biến
         var countdown = 9;
         var globalData = [];
         var currentIndex = 1;
         var pageSize = 10; // Số lượng dòng hiển thị trên 1 trang
         var displayTime = 0;
-        var maxDisplayTime = 10; // Sau 10 giây hiển thị danh sách mổ sẽ hiển thị quảng cáo
+        var maxDisplayTime = 30; // Sau ... giây hiển thị danh sách mổ thì sẽ hiển thị quảng cáo
         var adsDisplayTime = 10; // Số giây hiển thị giữa mỗi quảng cáo
-        var adsDuration = 300; // Thời lượng quảng cáo ( tính bằng giây )
         var inAdsMode = false;
-        const imgLength = 10; // Số lượng hình ảnh/video trong file assests/img
+        const imgLength = 10; // Số lượng hình ảnh/video trong file assests/files
 
-        // 
+        // Bật tiếng cho video
         document.getElementById("clickToStart").addEventListener("click", () => {
             document.getElementById("adVideo").muted = false;
             document.getElementById("clickToStart").style.display = "none";
         });
 
-        // Lấy tất cả tên file từ file assests/img (bao gồm cả ảnh và video)
+        // Lấy tất cả tên file từ file assests/files (bao gồm cả ảnh và video)
         function getAdFiles() {
             const adFiles = [];
-            const fileBasePath = "./assets/img/";
+            const fileBasePath = "./assets/files/";
             const fileCount = imgLength;
 
             const extensions = ['jpg', 'jpeg', 'png', 'mp4', 'mkv', 'webm', 'mp3'];
@@ -145,9 +146,22 @@
 
         // Hàm kiểm tra file có tồn tại không
         function checkFileExists(url) {
-            return fetch(url, { method: 'HEAD' })
-                .then(res => res.ok)
-                .catch(() => false);
+            return new Promise((resolve) => {
+                const ext = url.split('.').pop().toLowerCase();
+                const isVideoOrAudio = ['mp4', 'mkv', 'webm', 'mp3'].includes(ext);
+
+                const element = isVideoOrAudio ? document.createElement('video') : document.createElement('img');
+                element.src = url;
+
+                // Khi load thành công, file tồn tại
+                element.onload = () => resolve(true);
+                element.onerror = () => resolve(false);
+
+                // Với video/audio cần thêm lắng nghe metadata (đảm bảo nó có file)
+                if (isVideoOrAudio) {
+                    element.onloadedmetadata = () => resolve(true);
+                }
+            });
         }
 
         // Hàm lấy dữ liệu từ google sheet
@@ -202,13 +216,12 @@
             document.getElementById("data").style.display = "block";
         }
 
-        // Hàm hiển thị quảng cáo (có cả ảnh và video, đảm bảo video chiếu hết hoặc dừng đúng giờ)
+        // Hàm hiển thị quảng cáo (có cả ảnh và video)
         async function showAds() {
             document.querySelector('h2').style.display = "none";
             document.getElementById("data").style.display = "none";
             document.getElementById("ads").style.display = "block";
             document.getElementById("overlayBlur").style.display = "block";
-
 
             const adImage = document.getElementById("adImage");
             const adVideo = document.getElementById("adVideo");
@@ -224,29 +237,31 @@
 
             if (validFiles.length === 0) {
                 console.log("Không có quảng cáo nào hợp lệ.");
+                showData();
+                inAdsMode = false;
+                displayTime = 0;
                 return;
             }
 
             let index = 0;
-            let stopAds = false;
 
-            // Sau adsDuration giây thì dừng quảng cáo và quay lại dữ liệu
-            setTimeout(() => {
-                stopAds = true;
-                adImage.style.display = "none";
-                adVideo.pause();
-                adVideo.style.display = "none";
-                document.getElementById("overlayBlur").style.display = "none";
-                showData();
-                inAdsMode = false;
-                displayTime = 0;
-            }, adsDuration * 1000);
-
-            async function showNextAd() {
-                if (stopAds) return;
+            async function playNext() {
+                if (index >= validFiles.length) {
+                    // Đã chiếu xong tất cả, quay về danh sách mổ
+                    adImage.style.display = "none";
+                    adVideo.pause();
+                    adVideo.style.display = "none";
+                    document.getElementById("overlayBlur").style.display = "none";
+                    inAdsMode = false;
+                    displayTime = 0;
+                    currentIndex = 1;
+                    loadData();
+                    showData();
+                    return;
+                }
 
                 const file = validFiles[index];
-                const isVideo = file.endsWith(".mp4");
+                const isVideo = file.endsWith(".mp4") || file.endsWith(".webm") || file.endsWith(".mkv");
 
                 if (isVideo) {
                     adImage.style.display = "none";
@@ -255,9 +270,8 @@
                     adVideo.play();
 
                     adVideo.onended = () => {
-                        if (stopAds) return;
-                        index = (index + 1) % validFiles.length;
-                        showNextAd();
+                        index++;
+                        playNext();
                     };
                 } else {
                     adVideo.pause();
@@ -266,14 +280,13 @@
                     adImage.src = file;
 
                     setTimeout(() => {
-                        if (stopAds) return;
-                        index = (index + 1) % validFiles.length;
-                        showNextAd();
+                        index++;
+                        playNext();
                     }, adsDisplayTime * 1000);
                 }
             }
 
-            showNextAd();
+            playNext();
         }
 
         // Gọi hàm lần đầu chạy
@@ -295,7 +308,7 @@
                 return;
             }
 
-            if (displayTime % 10 === 0) {
+            if (displayTime % 15 === 0) {
                 if (currentIndex >= globalData.length) {
                     currentIndex = 1;
                     await getData();
